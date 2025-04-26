@@ -1,7 +1,3 @@
-!pip install openai==0.28
-# Install required libraries
-!pip install pinecone-client openai langchain
-
 import streamlit as st
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
