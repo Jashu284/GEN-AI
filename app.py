@@ -1,26 +1,30 @@
-import os
 import streamlit as st
-import openai
+from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
+import os
 
-# Load environment variables from .env file
+# Load environment variables from .env (for local testing)
 load_dotenv()
 
-# Fetch API keys and environment from OS Environment Variables
-pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone_env = os.getenv("PINECONE_ENV")
-pinecone_index_name = os.getenv("PINECONE_INDEX")
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Helper function to fetch secrets safely
+def get_secret(key):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return os.getenv(key)
 
-# Debugging - you can uncomment this to check if environment variables are loaded
-# st.write("Pinecone API Key:", pinecone_api_key)
-# st.write("Pinecone Env:", pinecone_env)
-# st.write("Pinecone Index:", pinecone_index_name)
-# st.write("OpenAI API Key:", openai.api_key)
+# Fetch API keys and environment
+pinecone_api_key = get_secret("PINECONE_API_KEY")
+pinecone_env = get_secret("PINECONE_ENV")
+pinecone_index_name = get_secret("PINECONE_INDEX")
+openai_api_key = get_secret("OPENAI_API_KEY")
+
+# Initialize OpenAI client
+client = OpenAI(api_key=openai_api_key)
 
 # Initialize Pinecone
-pc = Pinecone(api_key=pinecone_api_key, environment=pinecone_env)
+pc = Pinecone(api_key=pinecone_api_key)
 
 # Create index if it does not exist
 if pinecone_index_name not in [index.name for index in pc.list_indexes()]:
@@ -31,6 +35,7 @@ if pinecone_index_name not in [index.name for index in pc.list_indexes()]:
         spec=ServerlessSpec(cloud="aws", region=pinecone_env)
     )
 
+# Connect to the index
 index = pc.Index(pinecone_index_name)
 
 # Streamlit config
@@ -112,11 +117,11 @@ with st.form("chat-form", clear_on_submit=True):
 if submitted and user_input:
     st.session_state.history.append(("User", user_input))
 
-    # Get embedding for the question
-    embedding = openai.Embedding.create(
+    # Get embedding for the question (OpenAI client call)
+    embedding = client.embeddings.create(
         model="text-embedding-3-small",
         input=user_input
-    )["data"][0]["embedding"]
+    ).data[0].embedding
 
     # Query Pinecone for relevant chunks
     query_response = index.query(
@@ -143,13 +148,13 @@ Answer:"""
 Question: {user_input}
 Answer:"""
 
-    # Generate response
-    response = openai.ChatCompletion.create(
+    # Generate chat completion (OpenAI client call)
+    chat_response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}]
     )
 
-    answer = response["choices"][0]["message"]["content"].strip()
+    answer = chat_response.choices[0].message.content.strip()
 
     st.session_state.history.append(("Assistant", answer))
     st.rerun()
